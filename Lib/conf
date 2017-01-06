@@ -1,0 +1,43 @@
+[db]
+db   = movielearn
+port = 3306
+user = root
+host = 127.0.0.1
+pass =
+charset = utf8
+
+[url]
+url=https://movie.douban.com/tag/{tag}?start={start}&type={type}
+tag = 中国电影
+type = T
+
+[rex]
+item_rex = <a class="nbg" href="[/\w.:]+"  title=".+">[ \r\n]*<img src="[/\w.:]+" alt=".+" class="\w*"/>[ \r\n]*</a>
+item_href_rex = href="([/\w.:]+)"
+item_img_rex = src="([/\w.:]+)"
+item_skip_rex = <span class=["']allstar00["']><\/span>
+detail_title_rex=<h1>[.\s\S\r\n]*<\/h1>
+detail_title_filter_rex=<[^>]+>&,&[ \r\n]+
+detail_info_rex = <div id="info">[.\s\S]+?<\/div>
+detail_info_item_rex = <span class=["']pl["']>[.\s\S]+?<br\/>
+detail_info_item_director_rex = <span class=["']pl["']>导演[.\s\S]+?<br\/>
+detail_info_item_screenwriter_rex = <span class=["']pl["']>编剧[.\s\S]+?<br\/>
+detail_info_item_actor_rex = <span class=["']pl["']>主演[.\s\S]+?<br\/>
+detail_info_item_type_rex = <span class=["']pl["']>类型[.\s\S]+?<br\/>
+detail_info_item_split_rex = [^v]+:(.+)
+detail_score_rex = <strong class=["'][ \w]+["'] property=["'][:\w]+["']>(\d.\d)<\/strong>
+
+[constant]
+director_rex_pos = 0
+actor_rex_pos = 2
+screenwriter_rex_pos = 1
+type_rex_pos = 3
+page_size=20
+
+[thread]
+thread_nums=5
+
+[curl]
+cookie = cookie.txt
+proxy_list=101.53.101.172:9999,121.14.6.236:80,124.88.67.17:82,124.88.67.21:843,124.88.67.24:80,124.88.67.10:80,124.88.67.52:843,182.114.216.35:808,183.129.151.130:80,121.204.165.126:8118
+user_agent = Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.48
