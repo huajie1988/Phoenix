@@ -50,7 +50,6 @@ class Mysql(object):
             param.append(data[d])
         placeholder=','.join(placeholder_list)
         sql=sql.replace('%placeholder_list%',placeholder)
-
         res=False
         try:
             res=self.cur.execute(sql,param)

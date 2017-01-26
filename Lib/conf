@@ -17,6 +17,7 @@ item_href_rex = href="([/\w.:]+)"
 item_img_rex = src="([/\w.:]+)"
 item_skip_rex = <span class=["']allstar00["']><\/span>
 detail_title_rex=<h1>[.\s\S\r\n]*<\/h1>
+detail_img_rex=<img src=["'](.*)["'] title=".+" alt=".+" rel="v:image".*>
 detail_title_filter_rex=<[^>]+>&,&[ \r\n]+
 detail_info_rex = <div id="info">[.\s\S]+?<\/div>
 detail_info_item_rex = <span class=["']pl["']>[.\s\S]+?<br\/>

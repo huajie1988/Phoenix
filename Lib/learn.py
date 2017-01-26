@@ -1,4 +1,5 @@
 __author__ = 'Huajie'
+import math,sys
 
 class Learn(object):
     a=2
@@ -6,6 +7,7 @@ class Learn(object):
     c=2
     d=2
     e=2
+    sigma=.2
     def __init__(self):
         pass
 
@@ -49,3 +51,32 @@ class Learn(object):
         return min_theta
 
 
+    def calcGuessScore(self,score):
+
+        return score
+
+    def calcGuessTheta(self,score,score_real):
+        span=0.001
+        k=1.75
+        c=-5.5
+        variance_start=score*k+c
+        min=(score_real-variance_start)*(score_real-variance_start)
+        min_theta=[k,c]
+        theta=[min_theta[0],min_theta[1]]*2
+
+        for i in xrange(100000):
+            theta[0]=[(min_theta[0]-span),(min_theta[1]+span)]
+            theta[1]=[(min_theta[0]+span),(min_theta[1]-span)]
+            val1=theta[0][0]*score+theta[0][1]
+            val2=theta[1][0]*score+theta[1][1]
+            variance=[]
+            variance.append((score_real-val1)*(score_real-val1))
+            variance.append((score_real-val2)*(score_real-val2))
+            cnt=0
+            for v in variance:
+                if v<min:
+                    min=v
+                    min_theta=theta[cnt]
+                cnt+=1
+
+        return min_theta

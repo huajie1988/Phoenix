@@ -26,7 +26,92 @@ class MovieLearn:
     def run(self):
 
         # self.l.calc([.719,.8298,.8376,.698],9.5)
-        self.update()
+        # self.update()
+        # self.getScore([.626484668109668,.476830211455211,.608571428571429,.625])
+        # self.getScore([6.43698092742844/10,8.66153846153846/10,.88,.88])
+        # self.updateGuessScore()
+
+        self.prediction('https://movie.douban.com/subject/25801066/')
+
+    def prediction(self,url):
+        self.lock = threading.Lock()
+        c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
+
+        d={}
+        d["detail_url"]=url
+        detail_html=c.getDetail(url)
+        filter=self.conf.get("rex", "detail_title_filter_rex").split("&,&")
+        d["detail_title"]=c.getRex(detail_html,self.conf.get("rex", "detail_title_rex"),0,filter)
+        d['img_url']=c.getRex(detail_html,self.conf.get("rex", "detail_img_rex"),1)
+
+        d["score"]=c.getRex(detail_html,self.conf.get("rex", "detail_score_rex"),1)
+        info=c.getRex(detail_html,self.conf.get("rex", "detail_info_rex"))
+        # info_item=c.getRexAll(info,self.conf.get("rex", "detail_info_item_rex"),filter)
+
+        director = c.getRex(info,self.conf.get("rex", "detail_info_item_director_rex"))
+        d['director']=c.getRex(director,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  director else ''
+        screenwriter = c.getRex(info,self.conf.get("rex", "detail_info_item_screenwriter_rex"))
+        d['screenwriter']=c.getRex(screenwriter,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  screenwriter else ''
+        actor = c.getRex(info,self.conf.get("rex", "detail_info_item_actor_rex"))
+        d['actor']=c.getRex(actor,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  actor else ''
+        type = c.getRex(info,self.conf.get("rex", "detail_info_item_type_rex"))
+        d['type']=c.getRex(type,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
+        self.__update(d)
+        sm=self.m.table('score')
+        s=sm.find(where="name='"+d["detail_title"]+"'")
+        tm=self.m.table('type')
+        t=tm.find(where="1=1",fields="AVG(score) avg")
+        am=self.m.table('actor')
+        a=am.find(where="1=1",fields="AVG(score) avg")
+        dm=self.m.table('director')
+        d=dm.find(where="1=1",fields="AVG(score) avg")
+        scm=self.m.table('screenwriter')
+        sc=scm.find(where="1=1",fields="AVG(score) avg")
+        type_avg=s['type_avg'] if s['type_avg']>0 else t['avg']
+        actor_avg=s['actor_avg'] if s['actor_avg']>0 else a['avg']
+        director_avg=s['director_avg'] if s['director_avg']>0 else d['avg']
+        screenwriter_avg=s['screenwriter_avg'] if s['screenwriter_avg']>0 else sc['avg']
+        th=self.getTheta()
+        avg_score=self.getGuessScore([type_avg/10,actor_avg/10,director_avg/10,screenwriter_avg/10],th)
+        k,c=self.getGuessTheta()
+        val=k*avg_score+c
+        if val>10:
+            val=avg_score
+        print(val)
+
+    def updateGuessScore(self):
+        sm=self.m.table('score')
+        score=sm.findAll(where="1=1")
+        tm=self.m.table('type')
+        t=tm.find(where="1=1",fields="AVG(score) avg")
+        am=self.m.table('actor')
+        a=am.find(where="1=1",fields="AVG(score) avg")
+        dm=self.m.table('director')
+        d=dm.find(where="1=1",fields="AVG(score) avg")
+        scm=self.m.table('screenwriter')
+        sc=scm.find(where="1=1",fields="AVG(score) avg")
+
+        guess_score=[]
+        th=self.getTheta()
+        gtm=self.m.table('guess_theta')
+        for s in score:
+            type_avg=s['type_avg'] if s['type_avg']>0 else t['avg']
+            actor_avg=s['actor_avg'] if s['actor_avg']>0 else a['avg']
+            director_avg=s['director_avg'] if s['director_avg']>0 else d['avg']
+            screenwriter_avg=s['screenwriter_avg'] if s['screenwriter_avg']>0 else sc['avg']
+            avg_score=self.getGuessScore([type_avg/10,actor_avg/10,director_avg/10,screenwriter_avg/10],th)
+            guess_score.append({"id":s['id'],"avg_score":avg_score})
+            guess_theta=self.l.calcGuessTheta(avg_score,s['score_real'])
+            gtm.add({"k":guess_theta[0],"c":guess_theta[1],})
+
+        k,c=self.getGuessTheta()
+
+        sm=self.m.table('score')
+        for gs in guess_score:
+            val=k*gs['avg_score']+c
+            if val>10:
+                val=gs['avg_score']
+            sm.save({"score_guess":val},"id="+str(gs['id']))
 
     def update(self):
         self.lock = threading.Lock()
@@ -55,6 +140,19 @@ class MovieLearn:
         print("update finish")
 
 
+    def getGuessScore(self,avg_score,th):
+        score=th["theta1"]*avg_score[0]+th["theta2"]*avg_score[1]+th["theta3"]*avg_score[2]+th["theta4"]*avg_score[3]+th["theta5"]
+        return score
+
+    def getTheta(self):
+        thm=self.m.table('theta')
+        th=thm.find(where="1=1",fields="AVG(theta1) theta1,AVG(theta2) theta2,AVG(theta3) theta3,AVG(theta4) theta4,AVG(theta5) theta5")
+        return th
+
+    def getGuessTheta(self):
+        thm=self.m.table('guess_theta')
+        th=thm.find(where="1=1",fields="AVG(k) k,AVG(c) c")
+        return th['k'],th['c']
 
     def __get(self,url):
         self.lock.acquire()
