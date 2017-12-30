@@ -54,7 +54,9 @@ class Mysql(object):
         try:
             res=self.cur.execute(sql,param)
             self.db.commit()     #加上这句之后才会提交执行，否则不执行
-        except:
+        except MySQLdb.Error, arg:
+            (errno, err_msg) = arg
+            print "recv failed: %s, errno=%d" % (err_msg, errno)
             # 发生错误时回滚
             self.db.rollback()
 

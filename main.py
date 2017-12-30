@@ -1,6 +1,6 @@
 #-*- coding: UTF-8 -*-
 
-import ConfigParser,sys,threading,time
+import ConfigParser,sys,threading,time,os,json,random
 from Queue import Queue
 from Lib.curl import Curl
 from Lib.mysql import Mysql
@@ -14,7 +14,7 @@ class MovieLearn:
     l=''
     def __init__(self):
         cf = ConfigParser.ConfigParser()
-        cf.read("./Lib/conf")
+        cf.read(os.path.dirname(os.path.realpath(__file__))+"/Lib/conf")
         self.conf=cf
         db=self.conf.options("db")
         db_info={}
@@ -24,16 +24,159 @@ class MovieLearn:
         self.l=Learn()
 
     def run(self):
+        # try:
 
+            params=""
+            for i in range(1, len(sys.argv)):
+                params=sys.argv[i]
+            params=params.strip('-')
+            if params=='cs':
+                self.getComingSoon()
+            elif params=='it':
+                self.getInTheaters()
+            elif params=='ugs':
+                self.updateGuessScore()
+            elif params=='p':
+                url=raw_input("please input a movie url by douban:")
+                score = self.prediction(url)
+                som=self.m.table('score')
+                rt=som.find(where="source_url='"+url+"'")
+                if rt:            
+                    sod={"score_guess":score}
+                    som.save(sod,where="id='"+str(rt['id'])+"'")                
+            elif params=='up':
+                self.update()
+            elif params=='upsi':
+                self.updatePassScoreInfo()
+            elif params=='test':
+                self.test()
+        # except Exception as e:
+        #     print("Unexpected Error: {}".format(e))
+        # print self.__get("https://movie.douban.com/tag/中国电影?&type=T&start=0")
         # self.l.calc([.719,.8298,.8376,.698],9.5)
         # self.update()
         # self.getScore([.626484668109668,.476830211455211,.608571428571429,.625])
         # self.getScore([6.43698092742844/10,8.66153846153846/10,.88,.88])
         # self.updateGuessScore()
+        # url=raw_input("please input a movie url by douban:")
+        # print self.prediction(url)
+        # print self.calcPrediction(6.94391851408029,6.81666666666667,7,7);
+        # self.getComingSoon()
 
-        self.prediction('https://movie.douban.com/subject/25801066/')
+    def test(self):
+        print "test"
+
+    def calcPrediction(self,type_avg,actor_avg,director_avg,screenwriter_avg):
+        tm=self.m.table('type')
+        t=tm.find(where="1=1",fields="AVG(score) avg")
+        am=self.m.table('actor')
+        a=am.find(where="1=1",fields="AVG(score) avg")
+        dm=self.m.table('director')
+        d=dm.find(where="1=1",fields="AVG(score) avg")
+        scm=self.m.table('screenwriter')
+        sc=scm.find(where="1=1",fields="AVG(score) avg")
+        type_avg= type_avg if type_avg>0 else t['avg']
+        actor_avg=actor_avg if actor_avg>0 else a['avg']
+        director_avg=director_avg if director_avg>0 else d['avg']
+        screenwriter_avg=screenwriter_avg if screenwriter_avg>0 else sc['avg']
+        th=self.getTheta()
+        avg_score=self.getGuessScore([type_avg/10.0,actor_avg/10.0,director_avg/10.0,screenwriter_avg/10.0],th)
+        k,c=self.getGuessTheta()
+        val=k*avg_score+c
+        if val>10:
+            val=avg_score
+        return val
+
+    def getComingSoon(self):
+        c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
+        csjson=c.getDetail("https://api.douban.com/v2/movie/coming_soon")
+        cslist=json.loads(csjson)
+        for cs in cslist['subjects']:
+            scoend=random.randint(0,99)
+            print "scoend:",scoend
+            print "st1:", time.time()
+            time.sleep(scoend)
+            print "st2:", time.time()         
+            score=self.prediction(cs['alt'])
+            som=self.m.table('score')
+            rt=som.find(where="source_url='"+cs['alt']+"'")
+            if not rt:
+                continue            
+            sod={"score_guess":score}
+            som.save(sod,where="id='"+str(rt['id'])+"'")
+
+
+    def getInTheaters(self):
+        c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
+        csjson=c.getDetail("https://api.douban.com/v2/movie/in_theaters")
+        cslist=json.loads(csjson)
+        for cs in cslist['subjects']:
+            som=self.m.table('score')
+            rt=som.find(where="source_url='"+cs['alt']+"'")
+            if not rt:
+                continue
+            sod={"score_real":cs['rating']['average']}
+            som.save(sod,where="id='"+str(rt['id'])+"'")
+            if float(cs['rating']['average'])>0:
+                theta=self.l.calc([rt['type_avg']/10,rt['actor_avg']/10,rt['director_avg']/10,rt['screenwriter_avg']/10],float(cs['rating']['average']))
+                thm=self.m.table('theta')
+                thm.add({"theta1":theta[0],"theta2":theta[1],"theta3":theta[2],"theta4":theta[3],"theta5":theta[4]})
+
+            
+    def updatePassScoreInfo(self):
+        sm=self.m.table('score')
+        score=sm.findAll(where="1=1 AND complete = 0", order="id ASC Limit 10")
+        for s in score:
+            self.__updatePassScoreInfo(s['source_url'],s['id'])
+            
+    def __updatePassScoreInfo(self,url,id):
+        scoend=random.randint(0,99)
+        print url
+        print "scoend:",scoend
+        print "st1:", time.time()
+        time.sleep(scoend)
+        print "st2:", time.time()
+
+
+        self.lock = threading.Lock()
+        c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
+
+        d={}
+        d["detail_url"]=url
+        detail_html=c.getDetail(url)
+        filter=self.conf.get("rex", "detail_title_filter_rex").split("&,&")
+        
+        info=c.getRex(detail_html,self.conf.get("rex", "detail_info_rex"))
+        # info_item=c.getRexAll(info,self.conf.get("rex", "detail_info_item_rex"),filter)
+
+        director = c.getRex(info,self.conf.get("rex", "detail_info_item_director_rex"))
+        d['director']=c.getRex(director,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  director else ''
+        screenwriter = c.getRex(info,self.conf.get("rex", "detail_info_item_screenwriter_rex"))
+        d['screenwriter']=c.getRex(screenwriter,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  screenwriter else ''
+        actor = c.getRex(info,self.conf.get("rex", "detail_info_item_actor_rex"))
+        d['actor']=c.getRex(actor,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  actor else ''
+        type = c.getRex(info,self.conf.get("rex", "detail_info_item_type_rex"))
+        d['type']=c.getRex(type,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
+
+        release_date = c.getRex(info,self.conf.get("rex", "detail_info_item_release_date_rex"))
+        # d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  release_date else ''
+        d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_release_date_text_rex")) if  release_date else ''
+        d['complete']=0
+        if len(d['director'])>0 or len(d['screenwriter'])>0 or len(d['actor'])>0 or len(d['type'])>0 or len(d['release_date'])>0 :
+            d['complete']=1
+        som=self.m.table('score')
+
+        dtype="/".join(d['type'])
+        dactor="/".join(d['actor'])
+        ddirector="/".join(d['director'])
+        dscreenwriter="/".join(d['screenwriter'])
+        drelease_date=d['release_date']
+
+        sod={"type":dtype,"actor":dactor,"director":ddirector,"screenwriter":dscreenwriter,"release_date":drelease_date,"complete":d['complete']}
+        som.save(sod,where="id='"+str(id)+"'")       
 
     def prediction(self,url):
+
         self.lock = threading.Lock()
         c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
 
@@ -56,32 +199,43 @@ class MovieLearn:
         d['actor']=c.getRex(actor,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  actor else ''
         type = c.getRex(info,self.conf.get("rex", "detail_info_item_type_rex"))
         d['type']=c.getRex(type,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
-        self.__update(d)
+
+        release_date = c.getRex(info,self.conf.get("rex", "detail_info_item_release_date_rex"))
+        # d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
+        d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_release_date_text_rex")) if  release_date else ''
+        
+
         sm=self.m.table('score')
         s=sm.find(where="name='"+d["detail_title"]+"'")
-        tm=self.m.table('type')
-        t=tm.find(where="1=1",fields="AVG(score) avg")
-        am=self.m.table('actor')
-        a=am.find(where="1=1",fields="AVG(score) avg")
-        dm=self.m.table('director')
-        d=dm.find(where="1=1",fields="AVG(score) avg")
-        scm=self.m.table('screenwriter')
-        sc=scm.find(where="1=1",fields="AVG(score) avg")
-        type_avg=s['type_avg'] if s['type_avg']>0 else t['avg']
-        actor_avg=s['actor_avg'] if s['actor_avg']>0 else a['avg']
-        director_avg=s['director_avg'] if s['director_avg']>0 else d['avg']
-        screenwriter_avg=s['screenwriter_avg'] if s['screenwriter_avg']>0 else sc['avg']
-        th=self.getTheta()
-        avg_score=self.getGuessScore([type_avg/10,actor_avg/10,director_avg/10,screenwriter_avg/10],th)
-        k,c=self.getGuessTheta()
-        val=k*avg_score+c
-        if val>10:
-            val=avg_score
-        print(val)
+
+        if s and int(s['score_guess'] or 0)>0:
+            # when score_real!=score then update 
+            if float(d["score"]) >0 and abs(float(d["score"])-float(s['score_real']))>0.1:
+                self.__update(d)
+            return s['score_guess']
+
+
+        self.__update(d)
+        # tm=self.m.table('type')
+        # t=tm.find(where="1=1",fields="AVG(score) avg")
+        # am=self.m.table('actor')
+        # a=am.find(where="1=1",fields="AVG(score) avg")
+        # dm=self.m.table('director')
+        # d=dm.find(where="1=1",fields="AVG(score) avg")
+        # scm=self.m.table('screenwriter')
+        # sc=scm.find(where="1=1",fields="AVG(score) avg")
+        # type_avg=s['type_avg'] if s['type_avg']>0 else t['avg']
+        # actor_avg=s['actor_avg'] if s['actor_avg']>0 else a['avg']
+        # director_avg=s['director_avg'] if s['director_avg']>0 else d['avg']
+        # screenwriter_avg=s['screenwriter_avg'] if s['screenwriter_avg']>0 else sc['avg']
+        sm=self.m.table('score')
+        s=sm.find(where="name='"+d["detail_title"]+"'")
+
+        return self.calcPrediction(s['type_avg'],s['actor_avg'],s['director_avg'],s['screenwriter_avg'])
 
     def updateGuessScore(self):
         sm=self.m.table('score')
-        score=sm.findAll(where="1=1")
+        score=sm.findAll(where="1=1 AND score_guess IS NULL")
         tm=self.m.table('type')
         t=tm.find(where="1=1",fields="AVG(score) avg")
         am=self.m.table('actor')
@@ -129,6 +283,7 @@ class MovieLearn:
                 thread.start()
                 ts.append(thread)
                 start+=page_size
+                print start
 
             for thd in ts:
                 thd.join()
@@ -158,7 +313,7 @@ class MovieLearn:
         self.lock.acquire()
         c=Curl(cookie=self.conf.get("curl", "cookie"),proxy_list=self.conf.get("curl", "proxy_list"),user_agent=self.conf.get("curl", "user_agent"))
         r=c.getItemList(url,self.conf.get("rex", "item_rex"))
-
+        print r
         if len(r)<=0:
             return []
         detail=[]
@@ -172,6 +327,7 @@ class MovieLearn:
             d["detail_title"]=c.getRex(detail_html,self.conf.get("rex", "detail_title_rex"),0,filter)
 
             d["score"]=c.getRex(detail_html,self.conf.get("rex", "detail_score_rex"),1)
+
 
             if(d["score"]==0):
                 continue
@@ -190,6 +346,10 @@ class MovieLearn:
             d['actor']=c.getRex(actor,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  actor else ''
             type = c.getRex(info,self.conf.get("rex", "detail_info_item_type_rex"))
             d['type']=c.getRex(type,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
+            release_date = c.getRex(info,self.conf.get("rex", "detail_info_item_release_date_rex"),1)
+            # d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_split_rex"),1,filter).split('/') if  type else ''
+            d['release_date']=c.getRex(release_date,self.conf.get("rex", "detail_info_item_release_date_text_rex"))
+        
 
             # d['screenwriter']=info_item_list[int(self.conf.get("constant","screenwriter_rex_pos"))]
             # d['actor']=info_item_list[int(self.conf.get("constant","actor_rex_pos"))]
@@ -203,6 +363,7 @@ class MovieLearn:
     def __deal(self,url):
 
         detail=self.__get(url)
+        print detail
         if len(detail)<=0:
             self.share_queue.put(False)
         else:
@@ -224,6 +385,11 @@ class MovieLearn:
         detail_title=detail['detail_title']
         detail_url=detail['detail_url']
         img_url=detail['img_url']
+        dtype="/".join(detail['type'])
+        dactor="/".join(detail['actor'])
+        ddirector="/".join(detail['director'])
+        dscreenwriter="/".join(detail['screenwriter'])
+        drelease_date=detail['release_date']
 
         # 实际评分
         score=float(detail['score'])
@@ -301,16 +467,18 @@ class MovieLearn:
         som=self.m.table('score')
 
         rt=som.find(where="name='"+detail_title+"'")
-        sod={"name":detail_title,"img":img_url,"score_real":score,"source_url":detail_url,"type_avg":tavg,"actor_avg":aavg,"director_avg":davg,"screenwriter_avg":savg}
+        sod={"name":detail_title,"img":img_url,"score_real":score,"source_url":detail_url,"type_avg":tavg,"actor_avg":aavg,"director_avg":davg,"screenwriter_avg":savg,"type":dtype,"actor":dactor,"director":ddirector,"screenwriter":dscreenwriter,"release_date":drelease_date}
+
         if(not rt):
             som.add(sod)
         else:
             som.save(sod,where="name='"+detail_title+"'")
 
-        theta=self.l.calc([tavg/10,aavg/10,davg/10,savg/10],score)
+        # if score > 0:  
+        #     theta=self.l.calc([tavg/10,aavg/10,davg/10,savg/10],score)
 
-        thm=self.m.table('theta')
-        thm.add({"theta1":theta[0],"theta2":theta[1],"theta3":theta[2],"theta4":theta[3],"theta5":theta[4]})
+        #     thm=self.m.table('theta')
+        #     thm.add({"theta1":theta[0],"theta2":theta[1],"theta3":theta[2],"theta4":theta[3],"theta5":theta[4]})
 
         self.lock.release()
 

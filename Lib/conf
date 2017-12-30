@@ -12,7 +12,7 @@ tag = 中国电影
 type = T
 
 [rex]
-item_rex = <a class="nbg" href="[/\w.:]+"  title=".+">[ \r\n]*<img src="[/\w.:]+" alt=".+" class="\w*"/>[ \r\n]*</a>
+item_rex = <a class="nbg" href="[/\w.:]+"  title=".+">[ \r\n]*<img src="[/\w.:]+"[.\s\S]+alt=".+" class="\w*"/>[ \r\n]*</a>
 item_href_rex = href="([/\w.:]+)"
 item_img_rex = src="([/\w.:]+)"
 item_skip_rex = <span class=["']allstar00["']><\/span>
@@ -25,8 +25,10 @@ detail_info_item_director_rex = <span class=["']pl["']>导演[.\s\S]+?<br\/>
 detail_info_item_screenwriter_rex = <span class=["']pl["']>编剧[.\s\S]+?<br\/>
 detail_info_item_actor_rex = <span class=["']pl["']>主演[.\s\S]+?<br\/>
 detail_info_item_type_rex = <span class=["']pl["']>类型[.\s\S]+?<br\/>
+detail_info_item_release_date_rex = <span class=["']pl["']>上映日期[.\s\S]+?<br\/>
 detail_info_item_split_rex = [^v]+:(.+)
 detail_score_rex = <strong class=["'][ \w]+["'] property=["'][:\w]+["']>(\d.\d)<\/strong>
+detail_info_item_release_date_text_rex=\d{4}-\d{2}-\d{2}
 
 [constant]
 director_rex_pos = 0
@@ -40,5 +42,5 @@ thread_nums=5
 
 [curl]
 cookie = cookie.txt
-proxy_list=101.53.101.172:9999,121.14.6.236:80,124.88.67.17:82,124.88.67.21:843,124.88.67.24:80,124.88.67.10:80,124.88.67.52:843,182.114.216.35:808,183.129.151.130:80,121.204.165.126:8118
+proxy_list=122.193.14.103:82,218.14.121.230:9000,121.232.144.129:9000,180.118.73.227:9000,58.87.87.142:80
 user_agent = Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.48
